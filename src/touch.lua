@@ -1,97 +1,106 @@
 -- touch.lua: on-screen virtual controls for web/mobile
--- Detection strategy:
---   Native Android/iOS : love.touchpressed fires → _isMobile true, use touch events
---   Mobile web         : love.touchpressed fires first, then love.mousepressed
---                        → _touchSeen set on first touch, then mouse events drive buttons
---   Desktop web/native : only mouse fires, love.touchpressed never called → hidden
+-- Layout: D-pad (left), Fire button (right)
+-- Detection: native Android/iOS uses touch events; mobile web detected via
+-- love.touchpressed firing first, then mouse events drive the buttons.
 
 local Touch = {}
 
-local _held    = {}  -- key -> bool: finger currently on button
-local _pressed = {}  -- key -> bool: tapped this frame, cleared by flush()
-local _map     = {}  -- id -> button id
-local _font    = nil -- lazy-loaded
+local _held    = {}
+local _pressed = {}
+local _map     = {}
+local _font    = nil
 
 local _os        = love.system.getOS()
 local _isWeb     = (_os == "Web")
 local _isMobile  = (_os == "Android" or _os == "iOS")
-local _touchSeen = false  -- true once any touch event fires (mobile web detection)
+local _touchSeen = false
 local _state     = ""
 
-local function visible()
-  return _isMobile or _touchSeen
+local function visible() return _isMobile or _touchSeen end
+
+function Touch.setState(name) _state = name or "" end
+
+-- Layout constants
+local DSZ = 60   -- d-pad button size
+local FSZ = 90   -- fire button size
+local GAP = 6    -- gap between d-pad buttons
+local M   = 24   -- screen margin
+
+-- D-pad centre in screen coords (computed at draw time from sw, sh)
+-- cx = M + DSZ + GAP + DSZ/2
+-- cy = sh - M - DSZ - GAP - DSZ/2
+
+local function dpadCentre(sh)
+  local cx = M + DSZ + GAP + DSZ/2
+  local cy = sh - M - DSZ - GAP - DSZ/2
+  return cx, cy
 end
 
-function Touch.setState(name)
-  _state = name or ""
-end
-
--- Button layout: LEFT RIGHT FIRE grouped and centered at bottom
-local BSZ = 72   -- button size
-local SSZ = 54   -- small button size (up/down)
-local GAP = 10   -- gap between buttons
-local M   = 24   -- bottom margin
-
-local GRP = BSZ * 3 + GAP * 2  -- total width of main group
-
+-- Button definitions: pos returns top-left (x, y), sz is width/height
 local BTNS = {
+  {
+    id   = "up",
+    text = "^",
+    keys = { "up" },
+    held = false,
+    sz   = DSZ,
+    pos  = function(sw, sh)
+      local cx, cy = dpadCentre(sh)
+      return cx - DSZ/2, cy - DSZ/2 - DSZ - GAP
+    end,
+  },
+  {
+    id   = "down",
+    text = "v",
+    keys = { "down" },
+    held = false,
+    sz   = DSZ,
+    pos  = function(sw, sh)
+      local cx, cy = dpadCentre(sh)
+      return cx - DSZ/2, cy - DSZ/2 + DSZ + GAP
+    end,
+  },
   {
     id   = "left",
     text = "<",
     keys = { "left" },
     held = true,
-    sz   = BSZ,
-    pos  = function(sw, sh) return sw/2 - GRP/2,                   sh - BSZ - M end,
+    sz   = DSZ,
+    pos  = function(sw, sh)
+      local cx, cy = dpadCentre(sh)
+      return cx - DSZ/2 - DSZ - GAP, cy - DSZ/2
+    end,
   },
   {
     id   = "right",
     text = ">",
     keys = { "right" },
     held = true,
-    sz   = BSZ,
-    pos  = function(sw, sh) return sw/2 - GRP/2 + BSZ + GAP,       sh - BSZ - M end,
+    sz   = DSZ,
+    pos  = function(sw, sh)
+      local cx, cy = dpadCentre(sh)
+      return cx - DSZ/2 + DSZ + GAP, cy - DSZ/2
+    end,
   },
   {
     id   = "fire",
     text = "FIRE",
     keys = { "space", "return" },
     held = false,
-    sz   = BSZ,
-    pos  = function(sw, sh) return sw/2 - GRP/2 + BSZ*2 + GAP*2,   sh - BSZ - M end,
-  },
-  {
-    id    = "up",
-    text  = "^",
-    keys  = { "up" },
-    held  = false,
-    sz    = SSZ,
-    state = "hiscore_reg",
-    pos   = function(sw, sh) return sw/2 - SSZ - GAP/2, sh - BSZ - M - SSZ - GAP end,
-  },
-  {
-    id    = "down",
-    text  = "v",
-    keys  = { "down" },
-    held  = false,
-    sz    = SSZ,
-    state = "hiscore_reg",
-    pos   = function(sw, sh) return sw/2 + GAP/2,       sh - BSZ - M - SSZ - GAP end,
+    sz   = FSZ,
+    pos  = function(sw, sh)
+      return sw - M - FSZ, sh - M - FSZ
+    end,
   },
 }
-
-local function btnActive(btn)
-  return not btn.state or btn.state == _state
-end
 
 local function findBtn(x, y)
   local sw, sh = love.graphics.getDimensions()
   for _, btn in ipairs(BTNS) do
-    if btnActive(btn) then
-      local bx, by = btn.pos(sw, sh)
-      local sz = btn.sz
-      if x >= bx and x <= bx + sz and y >= by and y <= by + sz then
-        return btn.id
-      end
+    local bx, by = btn.pos(sw, sh)
+    local sz = btn.sz
+    if x >= bx and x <= bx + sz and y >= by and y <= by + sz then
+      return btn.id
     end
   end
 end
@@ -137,7 +146,6 @@ local function processRelease(id)
   if bid then releaseBtn(bid); _map[id] = nil end
 end
 
--- Native touch events (Android/iOS; also fires on mobile web alongside mouse)
 function Touch.touchpressed(id, x, y)
   _touchSeen = true
   if not _isWeb then processPress(id, x, y) end
@@ -151,7 +159,6 @@ function Touch.touchreleased(id, x, y)
   if not _isWeb then processRelease(id) end
 end
 
--- Mouse events: used on web (love.js routes touch through mouse) and native mobile
 function Touch.mousepressed(x, y, btn)
   if btn ~= 1 then return end
   if _isMobile or (_isWeb and _touchSeen) then processPress("mouse", x, y) end
@@ -167,14 +174,10 @@ function Touch.mousereleased(x, y, btn)
 end
 
 function Touch.flush()
-  local p = _pressed
-  _pressed = {}
-  return p
+  local p = _pressed; _pressed = {}; return p
 end
 
-function Touch.isDown(key)
-  return _held[key] == true
-end
+function Touch.isDown(key) return _held[key] == true end
 
 function Touch.draw()
   if not visible() then return end
@@ -185,22 +188,35 @@ function Touch.draw()
   love.graphics.origin()
   love.graphics.setFont(_font)
 
+  -- Draw d-pad centre decoration
+  local cx, cy = dpadCentre(sh)
+  love.graphics.setColor(0.2, 0.2, 0.2, 0.5)
+  love.graphics.rectangle("fill", cx - DSZ/2, cy - DSZ/2, DSZ, DSZ, 6, 6)
+
+  -- Draw buttons
   for _, btn in ipairs(BTNS) do
-    if btnActive(btn) then
-      local bx, by = btn.pos(sw, sh)
-      local sz     = btn.sz
-      local active = btn.held and _held[btn.keys[1]]
+    local bx, by = btn.pos(sw, sh)
+    local sz     = btn.sz
+    local active = btn.held and _held[btn.keys[1]]
+    local isFire = btn.id == "fire"
 
-      love.graphics.setColor(active and 1 or 0.15, active and 1 or 0.15, active and 1 or 0.15, 0.55)
-      love.graphics.rectangle("fill", bx, by, sz, sz, 10, 10)
-
-      love.graphics.setColor(0.9, 0.9, 0.9, 0.75)
-      love.graphics.setLineWidth(2)
-      love.graphics.rectangle("line", bx, by, sz, sz, 10, 10)
-
-      love.graphics.setColor(1, 1, 1, 1)
-      love.graphics.printf(btn.text, bx, by + sz/2 - 10, sz, "center")
+    love.graphics.setColor(active and 1 or 0.15, active and 1 or 0.15, active and 1 or 0.15, 0.55)
+    if isFire then
+      love.graphics.circle("fill", bx + sz/2, by + sz/2, sz/2)
+    else
+      love.graphics.rectangle("fill", bx, by, sz, sz, 8, 8)
     end
+
+    love.graphics.setColor(0.9, 0.9, 0.9, 0.75)
+    love.graphics.setLineWidth(2)
+    if isFire then
+      love.graphics.circle("line", bx + sz/2, by + sz/2, sz/2)
+    else
+      love.graphics.rectangle("line", bx, by, sz, sz, 8, 8)
+    end
+
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.printf(btn.text, bx, by + sz/2 - 10, sz, "center")
   end
 
   love.graphics.pop()
