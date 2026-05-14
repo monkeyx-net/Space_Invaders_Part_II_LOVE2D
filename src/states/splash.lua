@@ -111,19 +111,19 @@ end
 function Sign:draw()
   for row = 1, self.h do
     for col = 1, self.w do
-      if self.blocks[row][col] == 0 then goto next end
-      local bx = self.posX + (col - 1) * self.blockGap
-      -- row 1 is topmost; in bottom-up Y, row 1 = posY, row h = posY-(h-1)*blockGap
-      local by = self.posY - (row - 1) * self.blockGap
-      -- Convert bottom-up to Love2D: loveY = WORLD_H - by - blockSize
-      local loveY = WORLD_H - by - self.blockSize
-      local color = (row <= self.h / 2) and self.topColor or self.bottomColor
-      love.graphics.setColor(color[1], color[2], color[3], 1)
-      love.graphics.rectangle("fill",
-        math.floor(bx + 0.5),
-        math.floor(loveY + 0.5),
-        self.blockSize, self.blockSize)
-      ::next::
+      if self.blocks[row][col] ~= 0 then
+        local bx = self.posX + (col - 1) * self.blockGap
+        -- row 1 is topmost; in bottom-up Y, row 1 = posY, row h = posY-(h-1)*blockGap
+        local by = self.posY - (row - 1) * self.blockGap
+        -- Convert bottom-up to Love2D: loveY = WORLD_H - by - blockSize
+        local loveY = WORLD_H - by - self.blockSize
+        local color = (row <= self.h / 2) and self.topColor or self.bottomColor
+        love.graphics.setColor(color[1], color[2], color[3], 1)
+        love.graphics.rectangle("fill",
+          math.floor(bx + 0.5),
+          math.floor(loveY + 0.5),
+          self.blockSize, self.blockSize)
+      end
     end
   end
 end

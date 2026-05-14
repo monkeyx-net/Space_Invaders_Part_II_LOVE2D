@@ -206,17 +206,16 @@ function HiScoreReg:draw()
   for row = 1, KEY_ROWS do
     for col = 1, KEY_COLS do
       local key = keyLayout[row][col]
-      if key == "" then goto nextKey end
+      if key ~= "" then
+        local kx = self.padX + (col-1) * self.cellW
+        -- Row 1 at padY (top in bottom-up coords), row 2 below, etc.
+        local ky = self.padY - (row-1) * self.cellH
 
-      local kx = self.padX + (col-1) * self.cellW
-      -- Row 1 at padY (top in bottom-up coords), row 2 below, etc.
-      local ky = self.padY - (row-1) * self.cellH
+        local r, g, b = 0, 1, 1  -- cyan
+        if key == "RUB" or key == "END" then r,g,b = 1,0,1 end  -- magenta
 
-      local r, g, b = 0, 1, 1  -- cyan
-      if key == "RUB" or key == "END" then r,g,b = 1,0,1 end  -- magenta
-
-      font:draw(key, kx, ky, r, g, b)
-      ::nextKey::
+        font:draw(key, kx, ky, r, g, b)
+      end
     end
   end
 

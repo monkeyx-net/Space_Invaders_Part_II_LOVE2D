@@ -49,7 +49,7 @@ local defaultHiScores = {
 
 function si:loadHiScores()
   self.hiscores = {}
-  local data = love.filesystem.read(HISCORE_FILE)
+  local data = love.filesystem.getInfo(HISCORE_FILE) and love.filesystem.read(HISCORE_FILE)
   if data then
     for name, val in data:gmatch("([^\n]+)=(%d+)\n?") do
       self.hiscores[#self.hiscores+1] = {name=name, value=tonumber(val)}

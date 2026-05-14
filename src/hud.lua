@@ -125,23 +125,21 @@ end
 function HUD:draw()
   if not self.visible then return end
   for _, lbl in pairs(self.labels) do
-    if lbl.hidden then goto continue end
-    if lbl.flashing and not self.flashState then goto continue end
+    if not lbl.hidden and not (lbl.flashing and not self.flashState) then
+      if lbl.type == TYPE_TEXT then
+        local text = lbl.text:sub(1, lbl.phaseChars)
+        self.font:draw(text, lbl.x, lbl.y, lbl.r, lbl.g, lbl.b)
 
-    if lbl.type == TYPE_TEXT then
-      local text = lbl.text:sub(1, lbl.phaseChars)
-      self.font:draw(text, lbl.x, lbl.y, lbl.r, lbl.g, lbl.b)
+      elseif lbl.type == TYPE_INT then
+        local val  = lbl.getter()
+        local text = tostring(val)
+        self.font:draw(text, lbl.x, lbl.y, lbl.r, lbl.g, lbl.b)
 
-    elseif lbl.type == TYPE_INT then
-      local val  = lbl.getter()
-      local text = tostring(val)
-      self.font:draw(text, lbl.x, lbl.y, lbl.r, lbl.g, lbl.b)
-
-    elseif lbl.type == TYPE_BITMAP then
-      love.graphics.setColor(lbl.r, lbl.g, lbl.b, 1)
-      lbl.bmp:draw(lbl.x, lbl.y)
+      elseif lbl.type == TYPE_BITMAP then
+        love.graphics.setColor(lbl.r, lbl.g, lbl.b, 1)
+        lbl.bmp:draw(lbl.x, lbl.y)
+      end
     end
-    ::continue::
   end
 end
 

@@ -34,8 +34,8 @@ function Font.load(name)
 
   -- glyphFilenames mirrors the C++ pixiretro.h array (94 entries, ASCII 33..126)
   local glyphFilenames = {
-    "exclaim","dquote","hash","dollar","percent","ampersand","squote","lparen","rparen",
-    "asterisk","plus","comma","dash","fstop","fslash",
+    "emark","dquote","hash","dollar","percent","ampersand","squote","lrbracket","rrbracket",
+    "asterix","plus","comma","minus","dot","fslash",
     "0","1","2","3","4","5","6","7","8","9",
     "colon","scolon","lcroc","equals","rcroc","qmark","at",
     "A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z",
@@ -51,13 +51,7 @@ function Font.load(name)
     local gdata, _ = love.filesystem.read(glyphpath)
     local gm = gdata and parseKeyValue(gdata) or {}
 
-    local bmp = Bitmap.load(basepath:sub(1, -2) .. "/" .. fname)  -- try font-specific path
-    -- If not in cache under that path, load from font dir
-    if not bmp then
-      bmp = Bitmap.load(fname)
-    end
-    -- Actually, Bitmap.load uses assets/bitmaps/ path; for font glyphs we need a custom load
-    bmp = _loadGlyphBitmap(basepath, fname)
+    local bmp = _loadGlyphBitmap(basepath, fname)
 
     glyphs[ascii] = {
       asciiCode = ascii,
