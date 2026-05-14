@@ -18,6 +18,7 @@ local Audio    = require("audio")
 local Font     = require("font")
 local HUD      = require("hud")
 local Bitmap   = require("bitmap")
+local Touch    = require("touch")
 
 local Game         = require("states/game")
 local Splash       = require("states/splash")
@@ -134,6 +135,7 @@ function si:switchState(name)
     if self.activeState.leave then self.activeState:leave() end
   end
   self.activeState = self.states[name]
+  Touch.setState(name)
   if self.activeState then
     if self.activeState.enter then self.activeState:enter() end
   end
@@ -261,6 +263,7 @@ function love.load()
 end
 
 function love.update(dt)
+  for k in pairs(Touch.flush()) do _keyPressed[k] = true end
   si.hud:update(dt)
   if si.activeState and si.activeState.update then
     si.activeState:update(dt)
@@ -279,6 +282,7 @@ function love.draw()
   si.hud:draw()
 
   love.graphics.pop()
+  Touch.draw()
 end
 
 function love.keypressed(key)
@@ -287,6 +291,13 @@ function love.keypressed(key)
     love.event.quit()
   end
 end
+
+function love.touchpressed(id, x, y)  Touch.touchpressed(id, x, y)  end
+function love.touchmoved(id, x, y)    Touch.touchmoved(id, x, y)    end
+function love.touchreleased(id, x, y) Touch.touchreleased(id, x, y) end
+function love.mousepressed(x, y, btn) Touch.mousepressed(x, y, btn) end
+function love.mousemoved(x, y)        Touch.mousemoved(x, y)        end
+function love.mousereleased(x, y, btn) Touch.mousereleased(x, y, btn) end
 function love.gamepadpressed(joystick, button)
   -- Map gamepad buttons to virtual key names for consistency
   if button == "a" or button == "b" or button == "x" or button == "y" then

@@ -4,6 +4,7 @@
 local Bitmap                   = require("bitmap")
 local Collision                = require("collision")
 local Audio                    = require("audio")
+local Touch                    = require("touch")
 
 local Game                     = {}
 Game.__index                   = Game
@@ -682,6 +683,9 @@ function Game:doCannonMoving(dt)
         if js:isGamepadDown("dpleft") then lKey = true end
         if js:isGamepadDown("dpright") then rKey = true end
     end
+
+    if Touch.isDown("left")  then lKey = true end
+    if Touch.isDown("right") then rKey = true end
 
     local dir     = (lKey and not rKey) and -1 or ((rKey and not lKey) and 1 or 0)
     self.cannon.x = clamp(self.cannon.x + CANNON_SPEED * dir * dt,
