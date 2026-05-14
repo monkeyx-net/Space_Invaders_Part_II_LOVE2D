@@ -15,6 +15,7 @@ love:
 
 web: love
 	npx love.js -t "Space Invaders Part II" $(LOVE_FILE) $(WEB_DIR)
+	printf 'Header set Cross-Origin-Opener-Policy "same-origin"\nHeader set Cross-Origin-Embedder-Policy "require-corp"\n' > $(WEB_DIR)/.htaccess
 
 server:
 	python3 server.py

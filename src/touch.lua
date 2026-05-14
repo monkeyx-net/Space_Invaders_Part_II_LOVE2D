@@ -1,20 +1,22 @@
 -- touch.lua: on-screen virtual controls for web/mobile
--- Buttons are rendered in screen space (outside game world transform).
--- Held buttons (left/right) feed Touch.isDown() for continuous cannon movement.
--- Tap buttons (fire) inject into _keyPressed via Touch.flush() each frame.
+-- Detection strategy:
+--   Native Android/iOS : love.touchpressed fires → _isMobile true, use touch events
+--   Mobile web         : love.touchpressed fires first, then love.mousepressed
+--                        → _touchSeen set on first touch, then mouse events drive buttons
+--   Desktop web/native : only mouse fires, love.touchpressed never called → hidden
 
 local Touch = {}
 
 local _held    = {}  -- key -> bool: finger currently on button
 local _pressed = {}  -- key -> bool: tapped this frame, cleared by flush()
-local _map     = {}  -- touch/mouse id -> button id
-local _font    = nil -- created lazily on first draw
+local _map     = {}  -- id -> button id
+local _font    = nil -- lazy-loaded
 
--- Show controls on native mobile, or on web once a real touch is detected
 local _os        = love.system.getOS()
+local _isWeb     = (_os == "Web")
 local _isMobile  = (_os == "Android" or _os == "iOS")
-local _touchSeen = false  -- set true on first touch event on web
-local _state     = ""     -- current game state name
+local _touchSeen = false  -- true once any touch event fires (mobile web detection)
+local _state     = ""
 
 local function visible()
   return _isMobile or _touchSeen
@@ -24,47 +26,56 @@ function Touch.setState(name)
   _state = name or ""
 end
 
-local M   = 20  -- screen margin (px)
-local BSZ = 80  -- button size (px)
+-- Button layout: LEFT RIGHT FIRE grouped and centered at bottom
+local BSZ = 72   -- button size
+local SSZ = 54   -- small button size (up/down)
+local GAP = 10   -- gap between buttons
+local M   = 24   -- bottom margin
 
--- pos(sw, sh) returns top-left x, y in screen coords
+local GRP = BSZ * 3 + GAP * 2  -- total width of main group
+
 local BTNS = {
   {
     id   = "left",
     text = "<",
     keys = { "left" },
     held = true,
-    pos  = function(sw, sh) return M, sh - BSZ - M end,
+    sz   = BSZ,
+    pos  = function(sw, sh) return sw/2 - GRP/2,                   sh - BSZ - M end,
   },
   {
     id   = "right",
     text = ">",
     keys = { "right" },
     held = true,
-    pos  = function(sw, sh) return sw - BSZ - M, sh - BSZ - M end,
+    sz   = BSZ,
+    pos  = function(sw, sh) return sw/2 - GRP/2 + BSZ + GAP,       sh - BSZ - M end,
   },
   {
     id   = "fire",
     text = "FIRE",
     keys = { "space", "return" },
     held = false,
-    pos  = function(sw, sh) return sw / 2 - BSZ / 2, sh - BSZ - M end,
+    sz   = BSZ,
+    pos  = function(sw, sh) return sw/2 - GRP/2 + BSZ*2 + GAP*2,   sh - BSZ - M end,
   },
   {
     id    = "up",
     text  = "^",
     keys  = { "up" },
     held  = false,
+    sz    = SSZ,
     state = "hiscore_reg",
-    pos   = function(sw, sh) return M * 3 + BSZ, sh - BSZ * 2 - M * 2 end,
+    pos   = function(sw, sh) return sw/2 - SSZ - GAP/2, sh - BSZ - M - SSZ - GAP end,
   },
   {
     id    = "down",
     text  = "v",
     keys  = { "down" },
     held  = false,
+    sz    = SSZ,
     state = "hiscore_reg",
-    pos   = function(sw, sh) return M * 3 + BSZ, sh - BSZ - M end,
+    pos   = function(sw, sh) return sw/2 + GAP/2,       sh - BSZ - M - SSZ - GAP end,
   },
 }
 
@@ -77,7 +88,8 @@ local function findBtn(x, y)
   for _, btn in ipairs(BTNS) do
     if btnActive(btn) then
       local bx, by = btn.pos(sw, sh)
-      if x >= bx and x <= bx + BSZ and y >= by and y <= by + BSZ then
+      local sz = btn.sz
+      if x >= bx and x <= bx + sz and y >= by and y <= by + sz then
         return btn.id
       end
     end
@@ -101,19 +113,16 @@ end
 
 local function releaseBtn(id)
   local btn = getBtnById(id)
-  if not btn then return end
-  if btn.held then
-    for _, k in ipairs(btn.keys) do _held[k] = false end
-  end
+  if not btn or not btn.held then return end
+  for _, k in ipairs(btn.keys) do _held[k] = false end
 end
 
-function Touch.touchpressed(id, x, y)
-  _touchSeen = true
+local function processPress(id, x, y)
   local bid = findBtn(x, y)
   if bid then _map[id] = bid; pressBtn(bid) end
 end
 
-function Touch.touchmoved(id, x, y)
+local function processMoved(id, x, y)
   local prev = _map[id]
   local cur  = findBtn(x, y)
   if prev ~= cur then
@@ -123,33 +132,46 @@ function Touch.touchmoved(id, x, y)
   end
 end
 
-function Touch.touchreleased(id, x, y)
+local function processRelease(id)
   local bid = _map[id]
   if bid then releaseBtn(bid); _map[id] = nil end
 end
 
--- Mouse forwarding: only active on mobile OS (on mobile, LOVE fires both
--- touch and mouse events; on desktop we ignore mouse to avoid conflicts)
+-- Native touch events (Android/iOS; also fires on mobile web alongside mouse)
+function Touch.touchpressed(id, x, y)
+  _touchSeen = true
+  if not _isWeb then processPress(id, x, y) end
+end
+
+function Touch.touchmoved(id, x, y)
+  if not _isWeb then processMoved(id, x, y) end
+end
+
+function Touch.touchreleased(id, x, y)
+  if not _isWeb then processRelease(id) end
+end
+
+-- Mouse events: used on web (love.js routes touch through mouse) and native mobile
 function Touch.mousepressed(x, y, btn)
-  if _isMobile and btn == 1 then Touch.touchpressed("mouse", x, y) end
+  if btn ~= 1 then return end
+  if _isMobile or (_isWeb and _touchSeen) then processPress("mouse", x, y) end
 end
 
 function Touch.mousemoved(x, y)
-  if _isMobile then Touch.touchmoved("mouse", x, y) end
+  if _isMobile or (_isWeb and _touchSeen) then processMoved("mouse", x, y) end
 end
 
 function Touch.mousereleased(x, y, btn)
-  if _isMobile and btn == 1 then Touch.touchreleased("mouse", x, y) end
+  if btn ~= 1 then return end
+  if _isMobile or (_isWeb and _touchSeen) then processRelease("mouse") end
 end
 
--- Returns this-frame taps and resets them. Call once per update before state:update().
 function Touch.flush()
   local p = _pressed
   _pressed = {}
   return p
 end
 
--- Continuous held state for cannon movement polling.
 function Touch.isDown(key)
   return _held[key] == true
 end
@@ -166,17 +188,18 @@ function Touch.draw()
   for _, btn in ipairs(BTNS) do
     if btnActive(btn) then
       local bx, by = btn.pos(sw, sh)
+      local sz     = btn.sz
       local active = btn.held and _held[btn.keys[1]]
 
       love.graphics.setColor(active and 1 or 0.15, active and 1 or 0.15, active and 1 or 0.15, 0.55)
-      love.graphics.rectangle("fill", bx, by, BSZ, BSZ, 10, 10)
+      love.graphics.rectangle("fill", bx, by, sz, sz, 10, 10)
 
       love.graphics.setColor(0.9, 0.9, 0.9, 0.75)
       love.graphics.setLineWidth(2)
-      love.graphics.rectangle("line", bx, by, BSZ, BSZ, 10, 10)
+      love.graphics.rectangle("line", bx, by, sz, sz, 10, 10)
 
       love.graphics.setColor(1, 1, 1, 1)
-      love.graphics.printf(btn.text, bx, by + BSZ / 2 - 10, BSZ, "center")
+      love.graphics.printf(btn.text, bx, by + sz/2 - 10, sz, "center")
     end
   end
 
